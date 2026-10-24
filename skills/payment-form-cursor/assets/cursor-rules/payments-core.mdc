@@ -1,0 +1,33 @@
+---
+description: Архитектура и запреты для приёма онлайн-оплаты через {{PROVIDER}}. Применять при любой работе с оплатой, заказами, вебхуками.
+globs: {{PAYMENTS_GLOBS}}
+alwaysApply: false
+---
+
+# Оплата: ядро
+
+Стек: {{STACK}}. Провайдер: {{PROVIDER}}. Схема: {{SCHEME}}. Документация: {{PROVIDER_DOCS_URL}}.
+
+## Обязательный поток
+1. Клиент → `POST /api/payments { orderId }`. Сумму с клиента не принимать.
+2. Сервер считает сумму из заказа (минорные единицы, integer), создаёт `Payment(status=created)`, вызывает API провайдера с ключом идемпотентности из БД, сохраняет `providerPaymentId`.
+3. Клиенту — только данные для виджета ({{CLIENT_TOKEN_FIELD}}).
+4. Финальный статус — только из проверенного вебхука или серверного запроса статуса. `return_url`/колбэки виджета статус не меняют.
+
+## Модель данных
+- `Payment`: id, orderId, provider, providerPaymentId (unique), amountMinor, currency, status, idempotencyKey (unique), failureReason, createdAt, updatedAt.
+- `WebhookEvent`: provider, eventKey (unique), payload, receivedAt, processedAt.
+- Статусы: created → pending → requires_action → succeeded | failed | canceled → refunded. Переход назад запрещён.
+
+## Запрещено
+- Принимать, логировать, хранить PAN, CVC, срок карты; собирать их в своих `<input>`.
+- Секреты в клиентском коде, в `NEXT_PUBLIC_*`, в логах, в git. Только `process.env` на сервере; имена — в `.env.example`.
+- Скрипт провайдера в бандле/самохостинг.
+- Деньги как float. Только integer минорных единиц; формат для API провайдера — в адаптере ({{AMOUNT_FORMAT}}).
+- Вызовы API провайдера из компонентов — только через модуль `{{PROVIDER_ADAPTER_PATH}}`.
+
+## Обязательно
+- Адаптер провайдера с интерфейсом `createPayment`, `getPayment`, `verifyWebhook`, `refund` — чтобы провайдера можно было заменить.
+- Таймауты и ретраи HTTP к провайдеру с тем же ключом идемпотентности.
+- Авторизация владельца заказа, rate limit, CSRF.
+- Структурные логи с `paymentId`/`orderId`, без персональных данных.

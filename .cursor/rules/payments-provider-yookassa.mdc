@@ -1,0 +1,16 @@
+---
+description: Справка по API ЮKassa для адаптера lib/payments/providers/yookassa.ts.
+globs: lib/payments/providers/yookassa.ts
+alwaysApply: false
+---
+
+# ЮKassa: справка
+
+- Base URL `https://api.yookassa.ru/v3`, HTTP Basic `YOOKASSA_SHOP_ID:YOOKASSA_SECRET_KEY`. Тестовый магазин — отдельные shopId/ключ.
+- Создание: `POST /payments`, заголовок `Idempotence-Key` (UUID v4, ≤64 символов, действует 24 ч).
+  Тело: `{ amount: { value: "1990.00", currency: "RUB" }, capture: true, confirmation: { type: "embedded" }, description, metadata: { orderId, paymentId }, receipt? }`.
+  Клиенту — `confirmation.confirmation_token`.
+- Статус: `GET /payments/{id}`. Возврат: `POST /refunds` с `Idempotence-Key`.
+- Уведомления настраиваются в ЛК → Интеграция → HTTP-уведомления (URL `https://<домен>/api/webhooks/yookassa`).
+- Тестовые карты: `5555555555554477` (3DS), `5555555555554444`, `2200000000000004` (Мир, 3DS); отказ `insufficient_funds` — `5555555555554600`. Срок — любой будущий, CVC и код 3DS — любые.
+- Ссылки: https://yookassa.ru/developers/using-api/interaction-format · https://yookassa.ru/developers/using-api/webhooks · https://yookassa.ru/developers/payment-acceptance/testing-and-going-live/testing

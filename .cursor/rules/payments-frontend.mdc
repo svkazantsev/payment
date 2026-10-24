@@ -1,0 +1,21 @@
+---
+description: Страница и форма оплаты (виджет ЮKassa, Integration.js Т-Банка), UX, доступность, CSP.
+globs: app/checkout/**,app/payments/**,components/payments/**
+alwaysApply: false
+---
+
+# Оплата: фронтенд
+
+- ЮKassa: скрипт `https://yookassa.ru/checkout-widget/v1/checkout-widget.js`, `new window.YooMoneyCheckoutWidget({ confirmation_token, return_url, error_callback })`, `render('payment-form')`, по событию `complete` — `destroy()` и переход к опросу статуса.
+- Т-Банк: скрипт `https://integrationjs.t-static.ru/integration.js` (async, перед `</body>`), `PaymentIntegration.init({ terminalKey, product: 'eacq', features: { payment: {}, iframe: {} } })`; запасной вариант — редирект на `paymentUrl`.
+- Скрипты подключать через `next/script` только на странице оплаты, не импортировать в бандл.
+- Не вкладывать платёжную форму в свой iframe.
+- CSP страницы оплаты:
+  - ЮKassa: `https://yookassa.ru https://*.yookassa.ru` в `script-src`, `frame-src`, `connect-src`, `img-src`.
+  - Т-Банк: `https://*.tinkoff.ru https://*.tcsbank.ru https://*.tbank.ru https://*.nspk.ru https://*.t-static.ru` в `script-src`, `img-src`, `connect-src`, `style-src` (+ `'unsafe-inline'` в `style-src`); `frame-src` НЕ ограничивать (ломает 3-D Secure); заголовок `Cross-Origin-Opener-Policy` не отправлять.
+- На странице оплаты нет сторонних скриптов (аналитика, чаты, A/B).
+- Кнопка «Оплатить»: сумма и валюта, блокировка после клика, спиннер.
+- Состояния: загрузка формы · ошибка инициализации (с повтором) · обработка · успех · отказ (причина + «Попробовать снова»).
+- `/payments/[id]/result`: «Проверяем оплату…», опрос `GET /api/payments/:id` каждые 2 с до 60 с, затем «Статус уточняется, мы пришлём письмо».
+- Свои поля (email для чека): `<label>`, `autocomplete="email"`, `inputmode="email"`, ошибки через `aria-describedby`, фокус на первой ошибке.
+- Мобильная вёрстка проверяется на ширине 360 px.

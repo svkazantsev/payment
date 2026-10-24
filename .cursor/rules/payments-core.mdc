@@ -1,0 +1,39 @@
+---
+description: Архитектура и запреты для приёма онлайн-оплаты через ЮKassa и Т-Банк. Применять при любой работе с оплатой, заказами, вебхуками.
+globs: app/api/payments/**,app/api/webhooks/**,app/checkout/**,app/payments/**,lib/payments/**,prisma/schema.prisma
+alwaysApply: false
+---
+
+# Оплата: ядро
+
+Стек: Next.js (App Router) + TypeScript, Postgres + Prisma. Провайдеры: ЮKassa (`yookassa`) и Т-Банк (`tbank`), выбор через `PAYMENT_PROVIDER` или параметр заказа. Схема: одностадийная оплата, встроенная форма провайдера.
+Документация: https://yookassa.ru/developers/ · https://developer.tbank.ru/eacq/
+
+## Обязательный поток
+1. Клиент → `POST /api/payments { orderId, provider? }`. Сумму с клиента не принимать.
+2. Сервер считает сумму из заказа (`amountMinor`, копейки, integer), создаёт `Payment(status=created)`, вызывает адаптер провайдера с ключом идемпотентности из БД, сохраняет `providerPaymentId`.
+3. Клиенту — только данные для формы: ЮKassa → `confirmation_token`; Т-Банк → `paymentUrl`.
+4. Финальный статус — только из проверенного уведомления или серверного запроса статуса (`GET /v3/payments/{id}` / `GetState`). `return_url`, `SuccessURL`, колбэки виджета статус не меняют.
+
+## Модель данных
+- `Payment`: id (uuid), orderId, provider (`yookassa`|`tbank`), providerPaymentId (unique с provider), amountMinor (Int), currency (`RUB`), status, idempotencyKey (unique), failureReason, createdAt, updatedAt.
+- `WebhookEvent`: provider, eventKey (unique), payload (Json), receivedAt, processedAt.
+- Статусы: created → pending → succeeded | failed | canceled → refunded. Переход назад запрещён.
+
+## Адаптеры
+- `lib/payments/providers/yookassa.ts` и `lib/payments/providers/tbank.ts` реализуют общий интерфейс из `lib/payments/types.ts`:
+  `createPayment(order, idempotencyKey)`, `getPayment(providerPaymentId)`, `verifyWebhook(req)`, `parseWebhook(body)`, `refund(...)`.
+- Компоненты и роуты не вызывают API провайдеров напрямую — только через адаптеры.
+- Формат суммы — в адаптере: ЮKassa `value: "1990.00"` (строка, 2 знака); Т-Банк `Amount: 199000` (копейки, int).
+
+## Запрещено
+- Принимать, логировать, хранить номер карты, CVC, срок; собирать их в своих `<input>`.
+- Секреты в клиенте, в `NEXT_PUBLIC_*`, в логах, в git. Только `process.env` на сервере; имена — в `.env.example`.
+- Скрипты провайдеров в бандле или на своём хостинге.
+- Деньги как float.
+
+## Обязательно
+- Таймауты (10 с) и ретраи HTTP к провайдеру с тем же ключом идемпотентности.
+- Проверка владельца заказа, rate limit на `POST /api/payments`, CSRF.
+- Чек 54-ФЗ: если включена фискализация — `receipt` (ЮKassa) / `Receipt` (Т-Банк) формируется на сервере из позиций заказа.
+- Структурные логи с `paymentId`/`orderId`, без персональных данных.
