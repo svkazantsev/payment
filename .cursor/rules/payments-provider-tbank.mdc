@@ -1,0 +1,16 @@
+---
+description: Справка по API интернет-эквайринга Т-Банка для адаптера lib/payments/providers/tbank.ts.
+globs: lib/payments/providers/tbank.ts,lib/payments/signatures.ts
+alwaysApply: false
+---
+
+# Т-Банк: справка
+
+- Base URL `https://securepay.tinkoff.ru/v2`. Ключи: `TBANK_TERMINAL_KEY`, `TBANK_PASSWORD` (тестовый терминал — свой ключ с суффиксом DEMO).
+- Создание: `POST /Init` с `TerminalKey`, `Amount` (копейки, int), `OrderId` (= наш `Payment.id`, уникален), `Description`, `NotificationURL` (`https://<домен>/api/webhooks/tbank`), `SuccessURL`, `FailURL`, `Receipt?`, `DATA?`, `Token`.
+  `Token` = `tbankToken(params, TBANK_PASSWORD)` из @lib/payments/signatures.ts (только корневые скалярные поля + Password, сортировка по ключу, конкатенация значений, SHA-256 hex). Проверка в ЛК: заказ → `inittokenisvalid`.
+  Ответ: `PaymentId`, `PaymentURL` → клиенту `paymentUrl`.
+- Отдельного ключа идемпотентности нет: повтор `Init` делать с тем же `OrderId`; перед повтором проверять `GetState`.
+- Статус: `POST /GetState`; отмена/возврат: `POST /Cancel`. Все запросы подписываются `Token`.
+- Уведомления: ответ `OK`, иначе повторы раз в час 24 ч, затем раз в сутки месяц. При одностадийной оплате приходят `AUTHORIZED`, затем `CONFIRMED`.
+- Ссылки: https://developer.tbank.ru/eacq/api/init · https://developer.tbank.ru/eacq/intro/developer/token · https://developer.tbank.ru/eacq/intro/developer/notification · https://developer.tbank.ru/eacq/intro/developer/setup_js/

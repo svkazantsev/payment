@@ -1,0 +1,23 @@
+---
+description: Спецификация API {{PROVIDER}} для адаптера оплаты: эндпоинты, поля, подпись, тестовые данные.
+globs: {{PROVIDER_ADAPTER_PATH}}
+alwaysApply: false
+---
+
+# {{PROVIDER}}: справка для адаптера
+
+<!-- Заполнить из references/providers/<provider>.md, сверив с живой документацией. Разделы: -->
+## Аутентификация и окружения
+{{AUTH_AND_ENVS}}
+## Создание платежа
+{{CREATE_PAYMENT}}
+## Виджет
+{{WIDGET}}
+## Уведомления
+{{NOTIFICATIONS}}
+## Идемпотентность
+{{IDEMPOTENCY}}
+## Тестовые данные
+{{TEST_DATA}}
+## Ссылки
+{{DOC_LINKS}}

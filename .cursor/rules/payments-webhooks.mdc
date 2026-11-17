@@ -1,0 +1,25 @@
+---
+description: Обработчики уведомлений ЮKassa и Т-Банка: проверка подлинности, идемпотентность, статусы.
+globs: app/api/webhooks/**,lib/payments/**
+alwaysApply: false
+---
+
+# Оплата: уведомления
+
+Роуты: `app/api/webhooks/yookassa/route.ts`, `app/api/webhooks/tbank/route.ts`. Порядок строго такой:
+1. Прочитать raw body (`await req.text()`).
+2. Проверить подлинность:
+   - ЮKassa: IP отправителя входит в `YOOKASSA_IP_ALLOWLIST` (по умолчанию `185.71.76.0/27, 185.71.77.0/27, 77.75.153.0/25, 77.75.156.11, 77.75.156.35, 77.75.154.128/25, 2a02:5180::/32`), затем `GET /v3/payments/{object.id}` — дальше доверять только ответу API.
+   - Т-Банк: `verifyTbankNotification(body, TBANK_PASSWORD)` из @lib/payments/signatures.ts. Не изобретать алгоритм.
+   Неуспех → 400/403, ничего не менять, логировать без тела.
+3. `eventKey`: ЮKassa — `${event}:${object.id}`; Т-Банк — `${PaymentId}:${Status}`. Уже обработан → сразу ответ успехом.
+4. Одна транзакция БД: найти `Payment`, сверить сумму и валюту, переход статуса только вперёд, обновить `Order`, записать `processedAt`.
+5. Письма, выдача доступа — через очередь/outbox.
+6. Ответ: ЮKassa — HTTP 200 (тело любое); Т-Банк — HTTP 200 с телом `OK` (text/plain).
+
+Маппинг статусов:
+- ЮKassa: `payment.succeeded` → succeeded; `payment.canceled` → canceled/failed (по `cancellation_details.reason`); `payment.waiting_for_capture` → pending (при `capture: true` не ожидается); `refund.succeeded` → refunded.
+- Т-Банк: `AUTHORIZED` → pending; `CONFIRMED` → succeeded; `REJECTED` → failed; `CANCELED`, `REVERSED`, `DEADLINE_EXPIRED` → canceled; `REFUNDED` / `PARTIAL_REFUNDED` → refunded. Сверить со справочником статусов в документации.
+
+- Роуты уведомлений исключены из CSRF и auth-middleware, но не из проверки подлинности.
+- Тесты: повтор ×3, неверный Token / чужой IP, обратный порядок событий, несовпадение суммы.
